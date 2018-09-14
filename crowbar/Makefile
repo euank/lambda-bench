@@ -1,5 +1,4 @@
 .PHONY: all
-
 all:
 	docker run -it --rm -e "USER_UID=$(shell id -u)" \
 		-e "USER_GID=$(shell id -g)" -v "$(CURDIR):/home/rust/project" \
