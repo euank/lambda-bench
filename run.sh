@@ -6,76 +6,55 @@ LAMBDA_SIZE="${1:-128}"
 SLEEP_TIME="${2:-45m}" # Time to sleep before lambda is "frozen"
 
 dir=$(mktemp -p . -d lambda_XXXXX)
+prefix="$RANDOM"
+
+FUNCS=( "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world" )
 
 for src in "crowbar" "python" "go" "rust-aws-lambda"; do
   mkdir -p "$dir/$src"
-  cp "$src/deploy.zip" "$dir/$src/deploy-warm.zip"
-  cp "$src/deploy.zip" "$dir/$src/deploy-cold.zip"
+  cp "$src/deploy.zip" "$dir/$src/deploy.zip"
 
   # modify each deploy zip to cache-bust just in case lambda gets really good
   # at caching zips within an account across functions
   pushd "$dir/$src"
-  echo "$RANDOM" > warm
-  echo "$RANDOM" > cold
-  zip deploy-warm.zip warm
-  zip deploy-cold.zip cold
-  rm -f warm cold
+  echo "$RANDOM" > random
+  zip deploy.zip random
+  rm -f random
   popd
 done
 
 # cool, now $dir is setup for terraform's expectations. Create the functions.
-rand="$RANDOM"
-terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$rand" -var "zipdir=$dir" ./01_terraform-create
+echo "To destroy: "
+echo terraform destroy -auto-approve -var "prefix=$prefix" -state="$dir/tfstate" -var "zipdir=$dir" ./01_terraform-create
+terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir" ./01_terraform-create
 
 start_time="$(date -Is)"
 
-for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
+for fn in "${FUNCS[@]}"; do
   # Wait before the fn invocation in case lambda was already warm
-  echo "Sleeping ${SLEEP_TIME}. Get some covfefe"
+  echo "Sleeping ${SLEEP_TIME}. Get some coffee"
   sleep "${SLEEP_TIME}"
-  aws lambda invoke --function-name "${rand}${fn}_cold" /dev/null
-done
-
-echo "Cold funcs done, time for the warm ones!"
-
-# Now we can warm up the warm function, flip on xray for them, trigger each
-# function once, and record our data
-for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
-  # warm em twice, why not
-  aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
-  aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
-done
-
-# now that they're warm, turn on xray and invoke them
-terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$rand" -var "zipdir=$dir" ./02_terraform-enable-xray
-
-for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
-  aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
+  # Invoke once for a cold number, once for a warm one
+  aws lambda invoke --function-name "${prefix}${fn}" /dev/null
+  # let the first invocation finish
+  sleep 20
+  aws lambda invoke --function-name "${prefix}${fn}" /dev/null
 done
 
 # Collect data
 
-out="output/$rand"
+out="output/$RANDOM"
 mkdir -p "$out"
 
-echo "$LAMBDA_SIZE" > "$out/memory"
 echo "$SLEEP_TIME" > "$out/sleep"
 
-for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
-  got=false
-  while [[ "$got" == "false" ]]; do
-    warm="$(aws xray get-trace-summaries --start-time="$start_time" --end-time="$(date -Is)" --filter-expression "service(\"${rand}${fn}_warm\")" | jq '.TraceSummaries[].Duration' -r -c)"
-    cold="$(aws xray get-trace-summaries --start-time="$start_time" --end-time="$(date -Is)" --filter-expression "service(\"${rand}${fn}_cold\")" | jq '.TraceSummaries[].Duration' -r -c)"
-    if [[ "$warm" != "" ]] && [[ "$cold" != "" ]]; then
-      got=true
-    else
-      sleep 10
-    fi
-  done
-  echo "$warm" > "$out/${fn}_warm"
-  echo "$cold" > "$out/${fn}_cold"
-done
+# The aws cli is fine for invoking lambdas, but for parsing doubly nested json
+# documents (thanks xray), I'd rather use a real language.
+ruby ./collect_trace.rb \
+  "${prefix}" \
+  "${LAMBDA_SIZE}" \
+  "${FUNCS[@]}" > "$out/results.csv"
 
 # finally, cleanup
-terraform destroy -auto-approve -state="$dir/tfstate" -var "prefix=$rand" -var "zipdir=$dir" ./02_terraform-enable-xray
+terraform destroy -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir" ./01_terraform-create
 rm -rf "$dir"
