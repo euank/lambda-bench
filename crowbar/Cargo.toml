@@ -1,0 +1,12 @@
+[package]
+name = "crowbar-bench"
+version = "0.1.0"
+authors = ["Euan Kemp <euank@euank.com>"]
+
+[dependencies]
+crowbar = { version = "*", default-features = false }
+cpython = { version = "*", features = ["python-3-6"]}
+
+[lib]
+name = "lambda"
+crate-type = ["cdylib"]

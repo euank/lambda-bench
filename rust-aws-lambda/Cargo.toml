@@ -1,0 +1,7 @@
+[package]
+name = "rust-aws-lambda"
+version = "0.1.0"
+authors = ["Euan Kemp <euank@euank.com>"]
+
+[dependencies]
+aws_lambda = { git = "https://github.com/srijs/rust-aws-lambda", rev = "f7893fa54602b5845aace963f1d0c00ad8f38009" }
