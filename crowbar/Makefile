@@ -13,5 +13,4 @@ in_docker:
 	# This is the difference between it linking successfully and not. I blame lambda's python configuration for being bad.
 	sudo sed -i "s|'Py_ENABLE_SHARED'\: 0|'Py_ENABLE_SHARED'\: 1|g" /var/lang/lib/python3.6/_sysconfigdata_m_linux_x86_64-linux-gnu.py
 	cargo build --release
-	mkdir -p target/deploy/
 	cd target/release && zip ../../deploy.zip liblambda.so
