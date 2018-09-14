@@ -3,6 +3,7 @@
 set -eu
 
 LAMBDA_SIZE="${1:-128}"
+SLEEP_TIME="${2:-45m}" # Time to sleep before lambda is "frozen"
 
 dir=$(mktemp -p . -d lambda_XXXXX)
 
@@ -26,28 +27,30 @@ done
 rand="$RANDOM"
 terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$rand" -var "zipdir=$dir" ./01_terraform-create
 
-# Now the boring part. I think lambda might initialize functions as warm, so we wait a good hour for the functions to cool down.
-
 start_time="$(date -Is)"
-echo "Sleeping 1 hour. Get some covfefe"
-sleep "1h"
 
+for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
+  # Wait before the fn invocation in case lambda was already warm
+  echo "Sleeping ${SLEEP_TIME}. Get some covfefe"
+  sleep "${SLEEP_TIME}"
+  aws lambda invoke --function-name "${rand}${fn}_cold" /dev/null
+done
+
+echo "Cold funcs done, time for the warm ones!"
 
 # Now we can warm up the warm function, flip on xray for them, trigger each
 # function once, and record our data
-
 for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
   # warm em twice, why not
   aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
   aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
 done
 
-# now that they're warm, turn on xray and invoke everything
+# now that they're warm, turn on xray and invoke them
 terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$rand" -var "zipdir=$dir" ./02_terraform-enable-xray
 
 for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
   aws lambda invoke --function-name "${rand}${fn}_warm" /dev/null
-  aws lambda invoke --function-name "${rand}${fn}_cold" /dev/null
 done
 
 # Collect data
@@ -56,6 +59,7 @@ out="output/$rand"
 mkdir -p "$out"
 
 echo "$LAMBDA_SIZE" > "$out/memory"
+echo "$SLEEP_TIME" > "$out/sleep"
 
 for fn in "crowbar_hello_world" "python_hello_world" "rust-aws-lambda_hello_world" "go_hello_world"; do
   got=false
