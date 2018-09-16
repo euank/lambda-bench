@@ -25,8 +25,8 @@ done
 
 # cool, now $dir is setup for terraform's expectations. Create the functions.
 echo "To destroy: "
-echo terraform destroy -auto-approve -var "prefix=$prefix" -state="$dir/tfstate" -var "zipdir=$dir" ./01_terraform-create
-terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir" ./01_terraform-create
+echo terraform destroy -auto-approve -var "prefix=$prefix" -state="$dir/tfstate" -var "zipdir=$dir"
+terraform apply -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir"
 
 start_time="$(date -Is)"
 
@@ -56,5 +56,5 @@ ruby ./collect_trace.rb \
   "${FUNCS[@]}" > "$out/results.csv"
 
 # finally, cleanup
-terraform destroy -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir" ./01_terraform-create
+terraform destroy -auto-approve -state="$dir/tfstate" -var "prefix=$prefix" -var "zipdir=$dir"
 rm -rf "$dir"
