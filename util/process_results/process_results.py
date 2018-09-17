@@ -5,7 +5,7 @@ import collections
 import matplotlib.pyplot as plt
 import numpy as np
 
-files = glob.glob("./output/*/results.csv")
+files = glob.glob("./results-2018-09-14/*/results.csv")
 
 duration_data = {}
 f_duration_data = {}
