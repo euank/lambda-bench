@@ -1,7 +1,8 @@
 import csv
 import glob
 import collections
-
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -61,5 +62,15 @@ for idx, warmth in enumerate(["cold", "warm"]):
 			step = els // len(colors)
 			for plotel in range(i * step, (i+1)*step):
 				bplot[el][plotel].set(color=colors[i])
+	# annotate median values
+	medians = bplot['medians']
+	for m in medians:
+		x, y = m.get_xydata()[0]
+		ax.text(x, y, '%.3f' % y,
+			fontsize=8,
+			rotation=90,
+			horizontalalignment='right',
+			verticalalignment='center')
+
 
 plt.savefig('plot.png')
